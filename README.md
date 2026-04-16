@@ -1,6 +1,6 @@
 # MusicDSL - Interpreter Języka Muzycznego
 
-Projekt realizowany w ramach przedmiotu **Teoria Kompilatorów**. Skupia się na budowie interpretera języka dziedzinowego (DSL) do algorytmicznej kompozycji muzyki, ze szczególnym uwzględnieniem analizy leksykalnej i wizualizacji kodu.
+Projekt realizowany w ramach przedmiotu **Teoria kompilacji i kompilatory**. Skupia się na budowie interpretera języka dziedzinowego (DSL) do algorytmicznej kompozycji muzyki, ze szczególnym uwzględnieniem analizy leksykalnej i wizualizacji kodu.
 
 ## Zakres Projektu
 
