@@ -1,52 +1,151 @@
-import re
-import sys
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
-TOKENS = [
-    ('T_COMMENT', r'//.*'),
-    ('T_NOTE',    r'[A-G][#b]?[0-8]'),
-    ('T_KEYWORD', r'\b(tempo|play|repeat|instr)\b'),
-    ('T_DUR',     r'\[(1|2|4|8|16)\]'),
-    ('T_NUM',     r'\d+'),
-    ('T_OP',      r'[\{\}\=\,]'),
-    ('T_WHITESPACE', r'\s+'),
-    ('T_UNKNOWN', r'.'),
-]
 
-CSS = """
-body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; white-space: pre; padding: 20px; }
-.T_COMMENT { color: #6a9955; }
-.T_NOTE { color: #d2691e; font-weight: bold; }
-.T_KEYWORD { color: #569cd6; }
-.T_DUR { color: #b5cea8; }
-.T_NUM { color: #ce9178; }
-.T_OP { color: #808080; }
-.T_UNKNOWN { color: #f44336; text-decoration: underline; }
-"""
+class TokenType(Enum):
+    SLOWO_KLUCZOWE = "SLOWO_KLUCZOWE"
+    NUTA = "NUTA"
+    PAUZA = "PAUZA"
+    LICZBA = "LICZBA"
+    MODYFIKATOR_GORA = "MODYFIKATOR_GORA"
+    MODYFIKATOR_DOL = "MODYFIKATOR_DOL"
+    ZNAK_TAKTOWY = "ZNAK_TAKTOWY"
+    NAWIAS_L = "NAWIAS_L"
+    NAWIAS_P = "NAWIAS_P"
+    KONIEC = "KONIEC"
 
-def highlight(source_code):
-    html = ["<html><head><style>", CSS, "</style></head><body>"]
-    pos = 0
-    while pos < len(source_code):
-        match = None
-        for token_type, pattern in TOKENS:
-            regex = re.compile(pattern)
-            match = regex.match(source_code, pos)
-            if match:
-                text = match.group(0)
-                if token_type == 'T_WHITESPACE':
-                    html.append(text.replace(' ', '&nbsp;').replace('\t', '&nbsp;&nbsp;&nbsp;&nbsp;'))
-                else:
-                    html.append(f'<span class="{token_type}">{text}</span>')
-                pos = match.end()
-                break
-    html.append("</body></html>")
-    return "".join(html)
 
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python scanner.py input.music output.html")
-    else:
-        with open(sys.argv[1], 'r') as f:
-            code = f.read()
-        with open(sys.argv[2], 'w') as f:
-            f.write(highlight(code))
+@dataclass
+class Token:
+    type: TokenType
+    value: str
+    column: int
+
+    def __str__(self) -> str:
+        return f"({self.type.value}, {self.value!r})"
+
+
+class ScannerError(Exception):
+    def __init__(self, message: str, column: int):
+        self.column = column
+        super().__init__(f"Błąd skanera w kolumnie {column}: {message}")
+
+
+class Scanner:
+    def __init__(self, text: str):
+        self.text = text
+        self.pos = 0
+
+    @property
+    def column(self) -> int:
+        return self.pos + 1
+
+    def _current(self) -> Optional[str]:
+        if self.pos < len(self.text):
+            return self.text[self.pos]
+        return None
+
+    def _advance(self):
+        self.pos += 1
+
+    def _skip_whitespace(self):
+        while self._current() is not None and self._current().isspace():
+            self._advance()
+
+    def _scan_int(self) -> Token:
+        start_col = self.column
+        digits: list[str] = []
+        while self._current() is not None and self._current().isdigit():
+            digits.append(self._current())
+            self._advance()
+        return Token(TokenType.LICZBA, "".join(digits), start_col)
+
+    def _scan_word(self) -> Token:
+        start_col = self.column
+        chars: list[str] = []
+        
+        while self._current() is not None and (self._current().isalpha() or self._current().isdigit()):
+            chars.append(self._current().upper()) # Normalizujemy do wielkich liter
+            self._advance()
+            
+        word = "".join(chars)
+        
+        if word in ["TEMPO", "LOOP"]:
+            return Token(TokenType.SLOWO_KLUCZOWE, word, start_col)
+        elif len(word) == 1 and word in "ABCDEFG":
+            return Token(TokenType.NUTA, word, start_col)
+        elif len(word) == 1 and word == "P":
+            return Token(TokenType.PAUZA, word, start_col)
+            
+        raise ScannerError(f"nieznany identyfikator {word!r}", column=start_col)
+
+    def next_token(self) -> Token:
+        self._skip_whitespace()
+
+        if self._current() is None:
+            return Token(TokenType.KONIEC, "", self.column)
+
+        ch = self._current()
+        col = self.column
+
+        if ch.isdigit():
+            return self._scan_int()
+
+        if ch.isalpha():
+            return self._scan_word()
+
+        SINGLE_CHAR_TOKENS = {
+            "+": TokenType.MODYFIKATOR_GORA,
+            "-": TokenType.MODYFIKATOR_DOL,
+            "|": TokenType.ZNAK_TAKTOWY,
+            "[": TokenType.NAWIAS_L,
+            "]": TokenType.NAWIAS_P,
+        }
+        
+        if ch in SINGLE_CHAR_TOKENS:
+            self._advance()
+            return Token(SINGLE_CHAR_TOKENS[ch], ch, col)
+
+        raise ScannerError(
+            f"nierozpoznany znak {ch!r}",
+            column=col,
+        )
+
+
+def scan_to_tokens(expression: str) -> tuple[list[Token], ScannerError | None]:
+    scanner = Scanner(expression)
+    tokens: list[Token] = []
+    while True:
+        try:
+            token = scanner.next_token()
+        except ScannerError as e:
+            return tokens, e
+        if token.type == TokenType.KONIEC:
+            return tokens, None
+        tokens.append(token)
+
+
+def scan_expression(expression: str) -> list[Token]:
+    scanner = Scanner(expression)
+    tokens: list[Token] = []
+
+    print(f"Wyrażenie: {expression!r}")
+
+    while True:
+        try:
+            token = scanner.next_token()
+        except ScannerError as e:
+            print(f"BŁĄD: {e}")
+            print(expression)
+            print(" " * (e.column - 1) + "^")
+            break
+
+        if token.type == TokenType.KONIEC:
+            print("(KONIEC, '')")
+            break
+
+        tokens.append(token)
+        print(token)
+
+    return tokens
