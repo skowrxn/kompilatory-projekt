@@ -1,53 +1,118 @@
-# Skaner Języka Generującego Muzykę
+# MelodyLang - Kompilator Języka Muzycznego (Transpiler źródło-MIDI)
 
-## O projekcie
-Projekt implementuje analizator leksykalny (skaner) dla prostego języka opisu muzyki. Język ten pozwala na definiowanie tempa, wprowadzanie nut, pauz, określanie oktaw oraz grupowanie sekwencji w takty i powtórzenia. Głównym celem programu jest podział wejściowego ciągu znaków (kodu źródłowego) na logiczne jednostki zwane tokenami oraz wygenerowanie pliku HTML z pokolorowaną składnią i zaznaczonymi błędami leksykalnymi.
+**Przedmiot:** Techniki Kompilacji i Konfiguracji (TKiK)
+**ZESPÓŁ:**
 
-## Struktura projektu
+- Bartłomiej Skowron (bskowron@student.agh.edu.pl)
+- Kajetan Skitał (kskital@student.agh.edu.pl)
+- Jan Ster (sterjan@student.agh.edu.pl)
 
-* **`scanner.py`** – Rdzeń skanera. Zawiera definicje tokenów (`TokenType`, `Token`), klasę obsługującą błędy (`ScannerError`) oraz główną logikę analizatora leksykalnego (`Scanner`), która czyta tekst znak po znaku.
-* **`color_syntax.py`** – Moduł odpowiedzialny za generowanie wizualizacji. Tłumaczy rozpoznane tokeny na kod HTML, przypisując im odpowiednie kolory i formatowanie (np. pogrubienie dla słów kluczowych).
-* **`main.py`** – Skrypt uruchomieniowy. Testuje skaner na predefiniowanych przykładach, pozwala użytkownikowi na wprowadzanie własnych wyrażeń z poziomu konsoli i ostatecznie zapisuje wynik do pliku `output.html`.
+## Opis projektu
 
-## Zbiór tokenów
+Projekt **MelodyLang** to kompleksowy kompilator zbudowany w oparciu o specyfikację DSL (Domain Specific Language) dedykowanego do zapisu i sekwencjonowania utworów muzycznych. Kompilator przetwarza pliki z rozszerzeniem `.music`, przeprowadzając analizę leksykalną i syntaktyczną (z wykorzystaniem biblioteki **Lark**), w celu wygenerowania w pełni funkcjonalnego pliku binarnego MIDI (`.mid`).
 
-| Kod | Opis |
-| :--- | :--- |
-| `SŁOWO_KLUCZOWE` | Słowo kluczowe sterujące (np. `TEMPO`, `LOOP`) |
-| `NUTA` | Pojedyncza litera oznaczająca dźwięk (A, B, C, D, E, F, G) |
-| `PAUZA` | Litera oznaczająca pauzę (P) |
-| `LICZBA` | Ciąg cyfr (używany do określania czasu trwania nuty, tempa lub powtórzeń) |
-| `MODYFIKATOR_GORA` | Znak `+` (np. podwyższenie oktawy lub krzyżyk) |
-| `MODYFIKATOR_DOL` | Znak `-` (np. obniżenie oktawy lub bemol) |
-| `ZNAK_TAKTOWY` | Kreska pionowa `|` oddzielająca takty |
-| `NAWIAS_L` | Nawias kwadratowy otwierający `[` (do grupowania akordów/sekwencji) |
-| `NAWIAS_P` | Nawias kwadratowy zamykający `]` |
-| `KONIEC` | Koniec strumienia znaków |
+Kompilator wspiera:
 
-## Diagram przejść (Logika rozpoznawania)
+- Definiowanie struktur blokowych utworów
+- Zmienne i operacje podstawiania
+- Metaprogramowanie sekwencji muzycznych (pętle, rozwijanie pętli w locie)
+- Polimorficzne typy danych takie jak nuty obok całych akordów
 
-1. **Stan początkowy (START)**:
-   * Pomijaj białe znaki (spacje, tabulatory).
-   * Jeśli znak to litera `A-Z, a-z` -> przejdź do stanu **IDENTYFIKATOR**.
-   * Jeśli znak to cyfra `0-9` -> przejdź do stanu **LICZBA**.
-   * Jeśli znak to `+`, `-`, `|`, `[`, `]` -> rozpoznaj pojedynczy znak, zwróć odpowiedni token i wróć do START.
-   * Jeśli brak znaków (EOF) -> zwróć **KONIEC**.
-   * W przeciwnym razie -> rzuć **Błąd (Nierozpoznany znak)**.
+## Spis Tokenów
 
-2. **Stan LICZBA**:
-   * Czytaj kolejne znaki. Dopóki są cyframi, dodawaj do bufora. Po zakończeniu zwróć token `LICZBA`.
+W procesie skanowania tekst wejściowy rozbijany jest na tokeny zaprezentowane w poniższej tabeli:
 
-3. **Stan IDENTYFIKATOR**:
-   * Czytaj kolejne litery i cyfry do bufora.
-   * Jeśli wartość to "TEMPO" lub "LOOP" -> zwróć `SŁOWO_KLUCZOWE`.
-   * Jeśli długość to 1 i znak jest z zakresu A-G -> zwróć `NUTA`.
-   * Jeśli długość to 1 i znak to P -> zwróć `PAUZA`.
-   * W przeciwnym razie -> rzuć **Błąd (Nieznany identyfikator)**.
+| Token         | Wzorzec (Regex / String)             | Opis                                                                  |
+| ------------- | ------------------------------------ | --------------------------------------------------------------------- |
+| `TRACK`       | `"TRACK"`                            | Rozpoczęcie definicji domyślnej ścieżki w utworze.                    |
+| `SET`         | `"SET"`                              | Słowo kluczowe służące do ustalenia parametrów globalnych utworu.     |
+| `LOOP`        | `"LOOP"`                             | Definicja pętli sekwencyjnej (unrolling).                             |
+| `PLAY`        | `"PLAY"`                             | Wywołanie zdefiniowanej zmiennej.                                     |
+| `NOTE_PITCH`  | `/[A-G][b#]?[0-9]?(?![a-zA-Z0-9_])/` | Wzorzec definiujący literę nutową (np. C4, Db3, F#).                  |
+| `REST_CHAR`   | `/P(?![a-zA-Z0-9_])/`                | Pauza (przerwa) w sekwencji MIDI.                                     |
+| `CNAME`       | `/[a-zA-Z_]\w*/`                     | Standardowy identyfikator nazwy zmiennej bazujący na bibliotece lark. |
+| `INT`         | `/[0-9]+/`                           | Wartości całkowite.                                                   |
+| `EQUAL`       | `"="`                                | Operator przypisania wartości do zmiennej.                            |
+| `LBRACE`      | `"{"`                                | Otwarcie bloku instrukcji.                                            |
+| `RBRACE`      | `"}"`                                | Zamknięcie bloku instrukcji.                                          |
+| `LSQB`        | `"["`                                | Otwarcie sekwencji zmiennej (listy).                                  |
+| `RSQB`        | `"]"`                                | Zamknięcie sekwencji zmiennej.                                        |
+| `LESSTHAN`    | `"<"`                                | Otwarcie akordu muzycznego.                                           |
+| `GREATERTHAN` | `">"`                                | Zamknięcie akordu muzycznego.                                         |
+| `COLON`       | `":"`                                | Przedrostek definiujący czas trwania nuty.                            |
 
-## Jak uruchomić
+## Gramatyka EBNF
 
-1. Upewnij się, że masz zainstalowanego Pythona w wersji 3.10 lub nowszej.
-2. Pobierz pliki projektu do jednego folderu.
-3. Otwórz terminal w folderze z projektem i uruchom skrypt poleceniem:
-   ```bash
-   python main.py
+```ebnf
+start: program
+
+program: statement*
+
+?statement: track_def
+          | assignment
+          | set_param
+          | loop_block
+          | play_func
+          | sequence
+
+track_def: "TRACK" CNAME "{" statement* "}"
+
+assignment: CNAME "=" sequence
+
+set_param: "SET" CNAME "=" INT
+
+loop_block: "LOOP" INT "{" statement* "}"
+
+play_func: "PLAY" "(" CNAME ("," "times=" INT)? ")"
+
+sequence: "[" (note_item ("," note_item)*)? "]"
+        | note_item
+
+?note_item: note
+          | chord
+          | rest
+          | CNAME -> var_reference
+
+note: NOTE_PITCH duration?
+chord: "<" NOTE_PITCH ("," NOTE_PITCH)* ">" duration?
+rest: REST_CHAR duration?
+
+duration: ":" INT
+
+NOTE_PITCH.2: /[A-G][b#]?[0-9]?(?![a-zA-Z0-9_])/
+REST_CHAR.2: /P(?![a-zA-Z0-9_])/
+
+%import common.CNAME
+%import common.INT
+%import common.WS
+%import common.SH_COMMENT -> COMMENT
+
+%ignore WS
+%ignore COMMENT
+```
+
+## Architektura Translatora
+
+Rozwinięty potok kompilacji dzieli się na trzy fazy:
+
+1. **Skaner i Parser (LARK)** - `grammar.lark` stanowi rdzeń definiujący parsowanie kodu wejściowego do formy bezkontekstowego drzewa (Parse Tree).
+2. **AST Transformer** - `compiler.py` nadpisuje wygenerowane węzły drzewa ujednolicając wszystko do potężnej listy (spłaszczanie / "Loop unrolling") gotowej dla Backend'u. Logika ta również waliduje występowanie symboli (weryfikacja semantyczna w trakcie przypisywań i wywołań używając tzw. Tablicy Symboli).
+3. **Generator MIDI** - Klasa zawarta w module `midi_gen.py` iteruje po gotowych instrukcjach i śledząc absolutny upływ czasu konwertuje struktury notacyjne i uderzenia na finalny schemat i uderzenia `midiutil.MIDIFile`, tworząc ostateczny, binarny i bezbłędnie renderowany plik muzyczny.
+
+## Instrukcja uruchomienia
+
+Upewnij się, że wirtualne środowisko Python posiada zainstalowane zewnętrzne moduły: `lark`, dla procesowania teorii języka, oraz `midiutil`, by nadpisywać standardowy ciąg bitów dla wirtualnych instrumentów.
+
+Aby zainstalować wszystkie wymagane moduły, użyj komendy:
+
+```bash
+pip install lark midiutil
+```
+
+Aby skompilować plik z własnym kodem (domyślnie użyje `example.music` i wyrzuci `output.mid`):
+
+```bash
+python main.py --input example.music --output output.mid
+```
+
+Następnie bez problemu otwórz gotowy plik `.mid` przy pomocy narzędzi DAW (np. FL Studio/Ableton), odtwarzaczy systemowych bądź internetowych odtwarzaczy MIDI!

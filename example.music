@@ -1,0 +1,27 @@
+# example.music - Przykładowy program w języku MelodyLang
+# Pokazuje możliwości DSL do tworzenia muzyki
+
+SET TEMPO = 110
+SET INSTRUMENT = 1
+
+# Zmienne przechowujące sekwencje nut, akordów i pauz (P)
+bassline = [C2:4, P:8, G2:8, C2:4]
+melody_intro = [C4:4, E4:8, G4:8, C5:2]
+main_chords = [<C3, E3, G3>:2, <F2, A2, C3>:2]
+
+TRACK main {
+    # Proste odtworzenie bazowego motywu bassu
+    PLAY(bassline, times=2)
+    
+    # Zagnieżdżone pętle budujące napięcie
+    LOOP 2 {
+        PLAY(main_chords, times=1)
+        
+        LOOP 4 {
+            PLAY(melody_intro)
+        }
+    }
+    
+    # Ręczne użycie akordu i pauzy na koniec
+    [<C4, E4, G4, C5>:1, P:1]
+}
